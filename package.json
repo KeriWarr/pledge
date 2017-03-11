@@ -1,0 +1,35 @@
+{
+  "name": "pledge",
+  "version": "0.0.0",
+  "description": "Slack-bot for making casual wagers.",
+  "main": "index.js",
+  "repository": "git@github.com:KeriWarr/pledge.git",
+  "author": "Keri Warr <keri@warr.ca>",
+  "license": "MIT",
+  "scripts": {
+    "compile": "babel -s -d ./compiled ./src",
+    "run": "node index.js",
+    "start": "npm run compile && npm run run",
+    "clean": "rm -rf ./compiled"
+  },
+  "dependencies": {
+    "babel-cli": "^6.23.0",
+    "babel-preset-env": "^1.2.1",
+    "body-parser": "^1.17.1",
+    "dotenv": "^4.0.0",
+    "express": "^4.15.2",
+    "graphql": "^0.9.1",
+    "graphql-server-express": "^0.6.0",
+    "graphql-tools": "^0.10.1",
+    "pg": "^6.1.4",
+    "pg-hstore": "^2.3.2",
+    "ramda": "^0.23.0",
+    "sequelize": "^3.30.2",
+    "winston": "^2.3.1"
+  },
+  "devDependencies": {
+    "eslint": "^3.16.1",
+    "eslint-config-airbnb-base": "^11.1.1",
+    "eslint-plugin-import": "^2.2.0"
+  }
+}
