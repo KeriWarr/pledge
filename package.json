@@ -16,6 +16,7 @@
     "babel-cli": "^6.23.0",
     "babel-preset-env": "^1.2.1",
     "body-parser": "^1.17.1",
+    "continuation-local-storage": "^3.2.0",
     "dotenv": "^4.0.0",
     "express": "^4.15.2",
     "graphql": "^0.9.1",
@@ -35,6 +36,7 @@
   "devDependencies": {
     "eslint": "^3.16.1",
     "eslint-config-airbnb-base": "^11.1.1",
+    "eslint-plugin-graphql": "^0.6.1",
     "eslint-plugin-import": "^2.2.0"
   }
 }
