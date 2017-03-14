@@ -6,6 +6,9 @@ import Sequelize from 'sequelize';
 import { resolver } from 'graphql-sequelize';
 import { GraphQLDateTime } from 'graphql-iso-date';
 import cls from 'continuation-local-storage';
+import R from 'ramda';
+import assert from 'assert';
+import { constantCase } from 'change-case';
 
 const namespace = cls.createNamespace('pledge');
 
@@ -13,26 +16,34 @@ const namespace = cls.createNamespace('pledge');
 const { DATABASE_NAME, DATABASE_USERNAME, DATABASE_PASSWORD } = process.env;
 
 Sequelize.cls = namespace;
-const sequelize = new Sequelize(DATABASE_NAME, DATABASE_USERNAME, DATABASE_PASSWORD, {
-  host: 'localhost',
-  dialect: 'postgres',
-  pool: {
-    max: 5,
-    min: 0,
-    idle: 10000,
+const sequelize = new Sequelize(
+  DATABASE_NAME,
+  DATABASE_USERNAME,
+  DATABASE_PASSWORD,
+  {
+    host: 'localhost',
+    dialect: 'postgres',
+    pool: {
+      max: 5,
+      min: 0,
+      idle: 10000,
+    },
+    define: { paranoid: true },
+    logging: console.log,
   },
-  define: { paranoid: true },
-  logging: console.log,
-});
+);
 
 const SlackUserRegex = /.*/i;
 
-const User = sequelize.define('user', {
+const extendWithUUID = obj => Object.assign({}, obj, {
   id: {
     primaryKey: true,
     type: Sequelize.UUID,
     defaultValue: Sequelize.UUIDV4,
   },
+});
+
+const User = sequelize.define('user', extendWithUUID({
   slackId: {
     type: Sequelize.STRING(20),
     alllowNull: false,
@@ -40,26 +51,21 @@ const User = sequelize.define('user', {
       is: SlackUserRegex,
     },
   },
-});
+}));
 
 const Currencies = [
   'CAD',
   'USD',
 ];
 
-const Offer = sequelize.define('offer', {
-  id: {
-    primaryKey: true,
-    type: Sequelize.UUID,
-    defaultValue: Sequelize.UUIDV4,
-  },
+const Offer = sequelize.define('offer', extendWithUUID({
   currency: {
     type: Sequelize.ENUM,
     values: Currencies,
   },
   amountInCents: Sequelize.INTEGER,
   description: Sequelize.TEXT,
-});
+}));
 
 const Statuses = [
   'UNACCEPTED',
@@ -74,12 +80,7 @@ const Statuses = [
   'APPEALED',
 ];
 
-const Wager = sequelize.define('wager', {
-  id: {
-    primaryKey: true,
-    type: Sequelize.UUID,
-    defaultValue: Sequelize.UUIDV4,
-  },
+const Wager = sequelize.define('wager', extendWithUUID({
   intId: {
     type: Sequelize.INTEGER,
     autoIncrement: true,
@@ -102,7 +103,7 @@ const Wager = sequelize.define('wager', {
   takenAt: Sequelize.DATE,
   completedAt: Sequelize.DATE,
   closedAt: Sequelize.DATE,
-});
+}));
 
 const OperationTypes = [
   'ACCEPT',
@@ -114,18 +115,13 @@ const OperationTypes = [
   'PROPOSE',
 ];
 
-const Operation = sequelize.define('operation', {
-  id: {
-    primaryKey: true,
-    type: Sequelize.UUID,
-    defaultValue: Sequelize.UUIDV4,
-  },
+const Operation = sequelize.define('operation', extendWithUUID({
   type: {
     type: Sequelize.ENUM,
     values: OperationTypes,
     allowNull: false,
   },
-});
+}));
 
 Offer.Wager = Offer.hasOne(Wager);
 Wager.MakerOffer = Wager.belongsTo(Offer, { as: 'makerOffer' });
@@ -240,12 +236,29 @@ type Query {
   wagers: [Wager!]
 }
 
+input Offer {
+  currency: Currency
+  amountInCents: Int
+  description: String
+}
+
+input WagerParameters {
+  taker: String
+  arbiter: String
+  outcome: String
+  makerOffer: Offer
+  takerOffer: Offer
+  expiration: DateTime
+  maturation: DateTime
+}
+
 type Mutation {
   createOperation(
     slackId: String!
     type: OperationType!
     wagerId: ID
     wagerIntId: Int
+    wagerParameters: WagerParameters
   ): Operation
 }
 
@@ -253,6 +266,122 @@ schema {
   query: Query
   mutation: Mutation
 }`];
+
+
+const mapToSelf = list => R.zipObj(list.map(constantCase), list);
+const setEquivalent = R.compose(
+  R.equals([]),
+  R.symmetricDifference,
+);
+const setSubset = R.compose(
+  R.equals([]),
+  R.difference,
+);
+
+const OPERATION_TYPES = mapToSelf([
+  'ACCEPT',
+  'REJECT',
+  'CANCEL',
+  'TAKE',
+  'CLOSE',
+  'APPEAL',
+  'PROPOSE',
+]);
+
+const WAGER_PARAMETERS = mapToSelf([
+  'taker', 'arbiter', 'outcome', 'makerOffer',
+  'takerOffer', 'expiration', 'maturation',
+]);
+
+const PARAMETERS = {
+  FORBIDDEN: 0,
+  OPTIONAL: 1,
+  REQUIRED: 2,
+};
+
+const operationTypeToWagerParameterMap = {
+  [OPERATION_TYPES.ACCEPT]: {
+    [WAGER_PARAMETERS.TAKER]: PARAMETERS.FORBIDDEN,
+    [WAGER_PARAMETERS.ARBITER]: PARAMETERS.FORBIDDEN,
+    [WAGER_PARAMETERS.OUTCOME]: PARAMETERS.FORBIDDEN,
+    [WAGER_PARAMETERS.MAKER_OFFER]: PARAMETERS.FORBIDDEN,
+    [WAGER_PARAMETERS.TAKER_OFFER]: PARAMETERS.FORBIDDEN,
+    [WAGER_PARAMETERS.EXPIRATION]: PARAMETERS.FORBIDDEN,
+    [WAGER_PARAMETERS.MATURATION]: PARAMETERS.FORBIDDEN,
+  },
+  [OPERATION_TYPES.REJECT]: {
+    [WAGER_PARAMETERS.TAKER]: PARAMETERS.FORBIDDEN,
+    [WAGER_PARAMETERS.ARBITER]: PARAMETERS.FORBIDDEN,
+    [WAGER_PARAMETERS.OUTCOME]: PARAMETERS.FORBIDDEN,
+    [WAGER_PARAMETERS.MAKER_OFFER]: PARAMETERS.FORBIDDEN,
+    [WAGER_PARAMETERS.TAKER_OFFER]: PARAMETERS.FORBIDDEN,
+    [WAGER_PARAMETERS.EXPIRATION]: PARAMETERS.FORBIDDEN,
+    [WAGER_PARAMETERS.MATURATION]: PARAMETERS.FORBIDDEN,
+  },
+  [OPERATION_TYPES.CANCEL]: {
+    [WAGER_PARAMETERS.TAKER]: PARAMETERS.FORBIDDEN,
+    [WAGER_PARAMETERS.ARBITER]: PARAMETERS.FORBIDDEN,
+    [WAGER_PARAMETERS.OUTCOME]: PARAMETERS.FORBIDDEN,
+    [WAGER_PARAMETERS.MAKER_OFFER]: PARAMETERS.FORBIDDEN,
+    [WAGER_PARAMETERS.TAKER_OFFER]: PARAMETERS.FORBIDDEN,
+    [WAGER_PARAMETERS.EXPIRATION]: PARAMETERS.FORBIDDEN,
+    [WAGER_PARAMETERS.MATURATION]: PARAMETERS.FORBIDDEN,
+  },
+  [OPERATION_TYPES.TAKE]: {
+    [WAGER_PARAMETERS.TAKER]: PARAMETERS.FORBIDDEN,
+    [WAGER_PARAMETERS.ARBITER]: PARAMETERS.FORBIDDEN,
+    [WAGER_PARAMETERS.OUTCOME]: PARAMETERS.FORBIDDEN,
+    [WAGER_PARAMETERS.MAKER_OFFER]: PARAMETERS.FORBIDDEN,
+    [WAGER_PARAMETERS.TAKER_OFFER]: PARAMETERS.FORBIDDEN,
+    [WAGER_PARAMETERS.EXPIRATION]: PARAMETERS.FORBIDDEN,
+    [WAGER_PARAMETERS.MATURATION]: PARAMETERS.FORBIDDEN,
+  },
+  [OPERATION_TYPES.CLOSE]: {
+    [WAGER_PARAMETERS.TAKER]: PARAMETERS.FORBIDDEN,
+    [WAGER_PARAMETERS.ARBITER]: PARAMETERS.FORBIDDEN,
+    [WAGER_PARAMETERS.OUTCOME]: PARAMETERS.FORBIDDEN,
+    [WAGER_PARAMETERS.MAKER_OFFER]: PARAMETERS.FORBIDDEN,
+    [WAGER_PARAMETERS.TAKER_OFFER]: PARAMETERS.FORBIDDEN,
+    [WAGER_PARAMETERS.EXPIRATION]: PARAMETERS.FORBIDDEN,
+    [WAGER_PARAMETERS.MATURATION]: PARAMETERS.FORBIDDEN,
+  },
+  [OPERATION_TYPES.APPEAL]: {
+    [WAGER_PARAMETERS.TAKER]: PARAMETERS.FORBIDDEN,
+    [WAGER_PARAMETERS.ARBITER]: PARAMETERS.FORBIDDEN,
+    [WAGER_PARAMETERS.OUTCOME]: PARAMETERS.FORBIDDEN,
+    [WAGER_PARAMETERS.MAKER_OFFER]: PARAMETERS.FORBIDDEN,
+    [WAGER_PARAMETERS.TAKER_OFFER]: PARAMETERS.FORBIDDEN,
+    [WAGER_PARAMETERS.EXPIRATION]: PARAMETERS.FORBIDDEN,
+    [WAGER_PARAMETERS.MATURATION]: PARAMETERS.FORBIDDEN,
+  },
+  [OPERATION_TYPES.PROPOSE]: {
+    [WAGER_PARAMETERS.TAKER]: PARAMETERS.FORBIDDEN,
+    [WAGER_PARAMETERS.ARBITER]: PARAMETERS.FORBIDDEN,
+    [WAGER_PARAMETERS.OUTCOME]: PARAMETERS.FORBIDDEN,
+    [WAGER_PARAMETERS.MAKER_OFFER]: PARAMETERS.FORBIDDEN,
+    [WAGER_PARAMETERS.TAKER_OFFER]: PARAMETERS.FORBIDDEN,
+    [WAGER_PARAMETERS.EXPIRATION]: PARAMETERS.FORBIDDEN,
+    [WAGER_PARAMETERS.MATURATION]: PARAMETERS.FORBIDDEN,
+  },
+};
+
+assert(setEquivalent(
+  R.keys(OPERATION_TYPES),
+  R.keys(operationTypeToWagerParameterMap),
+));
+
+R.values(operationTypeToWagerParameterMap).forEach(
+  (operationTypeWagerParameters) => {
+    assert(setEquivalent(
+      R.keys(operationTypeWagerParameters),
+      R.keys(WAGER_PARAMETERS),
+    ));
+    assert(setSubset(
+      R.values(operationTypeWagerParameters),
+      R.values(PARAMETERS),
+    ));
+  },
+);
 
 const resolvers = {
   DateTime: GraphQLDateTime,
@@ -284,7 +413,13 @@ const resolvers = {
     wager: resolver(Offer.Wager),
   },
   Mutation: {
-    createOperation(_, { slackId, type, wagerId, wagerIntId }) {
+    createOperation(_, {
+      slackId, type, wagerId, wagerIntId,
+      wagerParameters: {
+        taker, arbiter, outcome, makerOffer,
+        takerOffer, expiration, maturation,
+      },
+    }) {
       if (type === 'PROPOSE' && (wagerId || wagerIntId)) {
         throw new Error('Must not specify an existing wager when proposing');
       } else if (type !== 'PROPOSE' && ((wagerId && wagerIntId) || (!wagerId && !wagerIntId))) {
