@@ -236,7 +236,7 @@ type Query {
   wagers: [Wager!]
 }
 
-input Offer {
+input OfferInput {
   currency: Currency
   amountInCents: Int
   description: String
@@ -245,9 +245,9 @@ input Offer {
 input WagerParameters {
   taker: String
   arbiter: String
-  outcome: String
-  makerOffer: Offer
-  takerOffer: Offer
+  outcome: String!
+  makerOffer: OfferInput!
+  takerOffer: OfferInput!
   expiration: DateTime
   maturation: DateTime
 }
@@ -268,120 +268,23 @@ schema {
 }`];
 
 
-const mapToSelf = list => R.zipObj(list.map(constantCase), list);
-const setEquivalent = R.compose(
-  R.equals([]),
-  R.symmetricDifference,
-);
-const setSubset = R.compose(
-  R.equals([]),
-  R.difference,
-);
+// const mapToSelf = list => R.zipObj(list.map(constantCase), list);
 
-const OPERATION_TYPES = mapToSelf([
-  'ACCEPT',
-  'REJECT',
-  'CANCEL',
-  'TAKE',
-  'CLOSE',
-  'APPEAL',
-  'PROPOSE',
-]);
+// const OPERATION_TYPES = mapToSelf([
+//   'ACCEPT',
+//   'REJECT',
+//   'CANCEL',
+//   'TAKE',
+//   'CLOSE',
+//   'APPEAL',
+//   'PROPOSE',
+// ]);
 
-const WAGER_PARAMETERS = mapToSelf([
-  'taker', 'arbiter', 'outcome', 'makerOffer',
-  'takerOffer', 'expiration', 'maturation',
-]);
+// const WAGER_PARAMETERS = mapToSelf([
+//   'taker', 'arbiter', 'outcome', 'makerOffer',
+//   'takerOffer', 'expiration', 'maturation',
+// ]);
 
-const PARAMETERS = {
-  FORBIDDEN: 0,
-  OPTIONAL: 1,
-  REQUIRED: 2,
-};
-
-const operationTypeToWagerParameterMap = {
-  [OPERATION_TYPES.ACCEPT]: {
-    [WAGER_PARAMETERS.TAKER]: PARAMETERS.FORBIDDEN,
-    [WAGER_PARAMETERS.ARBITER]: PARAMETERS.FORBIDDEN,
-    [WAGER_PARAMETERS.OUTCOME]: PARAMETERS.FORBIDDEN,
-    [WAGER_PARAMETERS.MAKER_OFFER]: PARAMETERS.FORBIDDEN,
-    [WAGER_PARAMETERS.TAKER_OFFER]: PARAMETERS.FORBIDDEN,
-    [WAGER_PARAMETERS.EXPIRATION]: PARAMETERS.FORBIDDEN,
-    [WAGER_PARAMETERS.MATURATION]: PARAMETERS.FORBIDDEN,
-  },
-  [OPERATION_TYPES.REJECT]: {
-    [WAGER_PARAMETERS.TAKER]: PARAMETERS.FORBIDDEN,
-    [WAGER_PARAMETERS.ARBITER]: PARAMETERS.FORBIDDEN,
-    [WAGER_PARAMETERS.OUTCOME]: PARAMETERS.FORBIDDEN,
-    [WAGER_PARAMETERS.MAKER_OFFER]: PARAMETERS.FORBIDDEN,
-    [WAGER_PARAMETERS.TAKER_OFFER]: PARAMETERS.FORBIDDEN,
-    [WAGER_PARAMETERS.EXPIRATION]: PARAMETERS.FORBIDDEN,
-    [WAGER_PARAMETERS.MATURATION]: PARAMETERS.FORBIDDEN,
-  },
-  [OPERATION_TYPES.CANCEL]: {
-    [WAGER_PARAMETERS.TAKER]: PARAMETERS.FORBIDDEN,
-    [WAGER_PARAMETERS.ARBITER]: PARAMETERS.FORBIDDEN,
-    [WAGER_PARAMETERS.OUTCOME]: PARAMETERS.FORBIDDEN,
-    [WAGER_PARAMETERS.MAKER_OFFER]: PARAMETERS.FORBIDDEN,
-    [WAGER_PARAMETERS.TAKER_OFFER]: PARAMETERS.FORBIDDEN,
-    [WAGER_PARAMETERS.EXPIRATION]: PARAMETERS.FORBIDDEN,
-    [WAGER_PARAMETERS.MATURATION]: PARAMETERS.FORBIDDEN,
-  },
-  [OPERATION_TYPES.TAKE]: {
-    [WAGER_PARAMETERS.TAKER]: PARAMETERS.FORBIDDEN,
-    [WAGER_PARAMETERS.ARBITER]: PARAMETERS.FORBIDDEN,
-    [WAGER_PARAMETERS.OUTCOME]: PARAMETERS.FORBIDDEN,
-    [WAGER_PARAMETERS.MAKER_OFFER]: PARAMETERS.FORBIDDEN,
-    [WAGER_PARAMETERS.TAKER_OFFER]: PARAMETERS.FORBIDDEN,
-    [WAGER_PARAMETERS.EXPIRATION]: PARAMETERS.FORBIDDEN,
-    [WAGER_PARAMETERS.MATURATION]: PARAMETERS.FORBIDDEN,
-  },
-  [OPERATION_TYPES.CLOSE]: {
-    [WAGER_PARAMETERS.TAKER]: PARAMETERS.FORBIDDEN,
-    [WAGER_PARAMETERS.ARBITER]: PARAMETERS.FORBIDDEN,
-    [WAGER_PARAMETERS.OUTCOME]: PARAMETERS.FORBIDDEN,
-    [WAGER_PARAMETERS.MAKER_OFFER]: PARAMETERS.FORBIDDEN,
-    [WAGER_PARAMETERS.TAKER_OFFER]: PARAMETERS.FORBIDDEN,
-    [WAGER_PARAMETERS.EXPIRATION]: PARAMETERS.FORBIDDEN,
-    [WAGER_PARAMETERS.MATURATION]: PARAMETERS.FORBIDDEN,
-  },
-  [OPERATION_TYPES.APPEAL]: {
-    [WAGER_PARAMETERS.TAKER]: PARAMETERS.FORBIDDEN,
-    [WAGER_PARAMETERS.ARBITER]: PARAMETERS.FORBIDDEN,
-    [WAGER_PARAMETERS.OUTCOME]: PARAMETERS.FORBIDDEN,
-    [WAGER_PARAMETERS.MAKER_OFFER]: PARAMETERS.FORBIDDEN,
-    [WAGER_PARAMETERS.TAKER_OFFER]: PARAMETERS.FORBIDDEN,
-    [WAGER_PARAMETERS.EXPIRATION]: PARAMETERS.FORBIDDEN,
-    [WAGER_PARAMETERS.MATURATION]: PARAMETERS.FORBIDDEN,
-  },
-  [OPERATION_TYPES.PROPOSE]: {
-    [WAGER_PARAMETERS.TAKER]: PARAMETERS.FORBIDDEN,
-    [WAGER_PARAMETERS.ARBITER]: PARAMETERS.FORBIDDEN,
-    [WAGER_PARAMETERS.OUTCOME]: PARAMETERS.FORBIDDEN,
-    [WAGER_PARAMETERS.MAKER_OFFER]: PARAMETERS.FORBIDDEN,
-    [WAGER_PARAMETERS.TAKER_OFFER]: PARAMETERS.FORBIDDEN,
-    [WAGER_PARAMETERS.EXPIRATION]: PARAMETERS.FORBIDDEN,
-    [WAGER_PARAMETERS.MATURATION]: PARAMETERS.FORBIDDEN,
-  },
-};
-
-assert(setEquivalent(
-  R.keys(OPERATION_TYPES),
-  R.keys(operationTypeToWagerParameterMap),
-));
-
-R.values(operationTypeToWagerParameterMap).forEach(
-  (operationTypeWagerParameters) => {
-    assert(setEquivalent(
-      R.keys(operationTypeWagerParameters),
-      R.keys(WAGER_PARAMETERS),
-    ));
-    assert(setSubset(
-      R.values(operationTypeWagerParameters),
-      R.values(PARAMETERS),
-    ));
-  },
-);
 
 const resolvers = {
   DateTime: GraphQLDateTime,
@@ -414,35 +317,53 @@ const resolvers = {
   },
   Mutation: {
     createOperation(_, {
-      slackId, type, wagerId, wagerIntId,
-      wagerParameters: {
-        taker, arbiter, outcome, makerOffer,
-        takerOffer, expiration, maturation,
-      },
+      slackId, type, wagerId, wagerIntId, wagerParameters,
     }) {
-      if (type === 'PROPOSE' && (wagerId || wagerIntId)) {
-        throw new Error('Must not specify an existing wager when proposing');
-      } else if (type !== 'PROPOSE' && ((wagerId && wagerIntId) || (!wagerId && !wagerIntId))) {
-        throw new Error('Must specify exactly one existing wager when not proposing');
+      const oneWagerSpecified = (
+        (wagerId && wagerIntId) ||
+        (!wagerId && !wagerIntId)
+      );
+      const zeroWagersSpecified = !wagerId && !wagerIntId;
+
+      if (type === 'PROPOSE') {
+        if (!zeroWagersSpecified) {
+          throw new Error('Must not specify an existing wager when proposing');
+        } else if (!wagerParameters) {
+          throw new Error('Wager Parameters must be specified when proposing');
+        }
+      } else if (!oneWagerSpecified) {
+        throw new Error(
+          'Must specify exactly one existing wager when not proposing',
+        );
+      } else if (wagerParameters) {
+        throw new Error(
+          'Wager Parameters must not be specified when not proposing',
+        );
       }
 
       return sequelize.transaction(() => {
         const userPromise = User.findOrCreate({ where: { slackId } });
         let wagerPromise;
+        let takerPromise;
+        let arbiterPromise;
         if (type === 'PROPOSE') {
-          wagerPromise = Wager.create({
-            outcome: 'foo',
-            makerOffer: {
-              description: 'bar',
-            },
-            takerOffer: {
-              currency: 'CAD',
-              amountInCents: 250,
-            },
-            status: 'LISTED',
-          }, {
+          wagerPromise = Wager.create(Object.assign({}, R.pick([
+            'outcome', 'makerOffer', 'takerOffer', 'expiration', 'maturation',
+          ], wagerParameters), {
+            status: wagerParameters.taker ? 'UNACCEPTED' : 'LISTED',
+          }), {
             include: [Wager.MakerOffer, Wager.TakerOffer],
           });
+          if (wagerParameters.taker) {
+            takerPromise = User.findOrCreate({ where: {
+              slackId: wagerParameters.taker,
+            } });
+          }
+          if (wagerParameters.arbiter) {
+            arbiterPromise = User.findOrCreate({ where: {
+              slackId: wagerParameters.arbiter,
+            } });
+          }
         } else if (wagerId) {
           wagerPromise = Wager.findById(wagerId);
         } else {
@@ -451,22 +372,51 @@ const resolvers = {
         const operationPromise = Operation.create({ type });
 
         let savedOperation;
-        return Promise.all([userPromise, wagerPromise, operationPromise]).then(
-          ([userTuple, wager, operation]) => {
-            const user = userTuple[0];
+        return Promise.all([
+          userPromise, wagerPromise, operationPromise,
+          takerPromise, arbiterPromise,
+        ]).then(
+          ([[user], wager, operation, [taker], [arbiter]]) => {
             savedOperation = operation;
             const operationSetUserPromise = operation.setUser(user);
             const operationSetWagerPromise = operation.setWager(wager);
-            const wagerSetMakerPromise = wager.setMaker(user);
-            const userAddWagerPromise = user.addWager(wager);
+            let wagerSetMakerPromise;
+            const userAddWagerPromises = [];
+
+            switch (type) {
+              case 'ACCEPT':
+              case 'REJECT':
+              case 'CANCEL':
+              case 'TAKE':
+              case 'CLOSE':
+              case 'APPEAL':
+              case 'PROPOSE':
+                userAddWagerPromises.push(user.addWager(wager));
+                wagerSetMakerPromise = wager.setMaker(user);
+                break;
+              case ''
+              default:
+            }
+
+            if (taker) {
+              wager.setTaker(taker);
+              userAddWagerPromises.push(taker.addWager(wager));
+            }
+            if (arbiter) {
+              wager.setArbiter(arbiter);
+              userAddWagerPromises.push(arbiter.addWager(wager));
+            }
             return Promise.all([
               operationSetUserPromise,
               operationSetWagerPromise,
               wagerSetMakerPromise,
-              userAddWagerPromise,
+              ...userAddWagerPromises,
             ]);
           },
-        ).then(() => savedOperation);
+        ).then(() => savedOperation)
+        .catch((reason) => {
+          throw new Error(reason);
+        });
       });
     },
   },
